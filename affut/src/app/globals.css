@@ -1,0 +1,293 @@
+/* Affût : outil métier, dense et calme. Les données sont le seul élément autorisé à être coloré.
+   Toute couleur et toute police passe par un jeton déclaré ci-dessous. */
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --font-ui: "IBM Plex Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Surfaces et encres */
+  --plane: #f6f6f3;
+  --surface: #fdfdfc;
+  --sunken: #efeeea;
+  --ink: #0f0f0e;
+  --ink-2: #4d4c49;
+  --ink-3: #6f6d67;
+  --axis: #898781;
+  --line: #e1e0d9;
+  --line-strong: #c3c2b7;
+  --accent: #0f0f0e;
+  --on-accent: #fdfdfc;
+  --focus: #2a78d6;
+
+  /* États : toujours accompagnés d'une icône et d'un libellé */
+  --critical: #d03b3b;
+  --critical-ink: #a32424;
+  --critical-soft: #fbecea;
+  --warning: #e39a00;
+  --warning-ink: #7a5000;
+  --warning-soft: #fdf3d9;
+  --good: #0ca30c;
+  --good-ink: #006300;
+  --good-soft: #e8f4e5;
+
+  /* Identité des séries : un sport garde sa couleur sur tous les écrans */
+  --swim: #2a78d6;
+  --bike: #eb6834;
+  --run: #1baf7a;
+  --other: #898781;
+  --fitness: #6250d6;
+  --fatigue: #e87ba4;
+  --band: #ecebf9;
+  /* Échelle ordonnée d'intensité : une seule teinte, du clair au foncé */
+  --zone-low: #cfcdc4;
+  --zone-low-ink: #0f0f0e;
+  --zone-mid: #8f8d86;
+  --zone-mid-ink: #0f0f0e;
+  --zone-high: #3b3a37;
+  --zone-high-ink: #fdfdfc;
+
+  --radius-control: 6px;
+  --radius-panel: 10px;
+  --dur-micro: 120ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --sunken: #242422;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a198;
+    --axis: #898781;
+    --line: #2c2c2a;
+    --line-strong: #44443f;
+    --accent: #f0efec;
+    --on-accent: #0d0d0d;
+    --focus: #6da7ec;
+
+    --critical: #e05252;
+    --critical-ink: #f29a9a;
+    --critical-soft: #371a1a;
+    --warning: #fab219;
+    --warning-ink: #f6c453;
+    --warning-soft: #33280d;
+    --good: #0ca30c;
+    --good-ink: #5fd15f;
+    --good-soft: #142b16;
+
+    --swim: #3987e5;
+    --bike: #d95926;
+    --run: #199e70;
+    --fitness: #9085e9;
+    --fatigue: #d55181;
+    --band: #26243f;
+    --zone-low: #4a4944;
+    --zone-low-ink: #f0efec;
+    --zone-mid: #8f8d86;
+    --zone-mid-ink: #0d0d0d;
+    --zone-high: #e3e1d8;
+    --zone-high-ink: #0d0d0d;
+  }
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-plane: var(--plane);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-axis: var(--axis);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-focus: var(--focus);
+  --color-critical: var(--critical);
+  --color-critical-ink: var(--critical-ink);
+  --color-critical-soft: var(--critical-soft);
+  --color-warning: var(--warning);
+  --color-warning-ink: var(--warning-ink);
+  --color-warning-soft: var(--warning-soft);
+  --color-good: var(--good);
+  --color-good-ink: var(--good-ink);
+  --color-good-soft: var(--good-soft);
+  --color-swim: var(--swim);
+  --color-bike: var(--bike);
+  --color-run: var(--run);
+  --color-other: var(--other);
+  --color-fitness: var(--fitness);
+  --color-fatigue: var(--fatigue);
+  --color-band: var(--band);
+  --color-transparent: transparent;
+
+  --font-sans: var(--font-ui);
+
+  /* Échelle fixe, rapport 1,2 */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-lg: 1.0625rem;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.9rem;
+  --text-3xl: 1.8125rem;
+  --text-3xl--line-height: 2.2rem;
+
+  --radius-control: var(--radius-control);
+  --radius-panel: var(--radius-panel);
+}
+
+@layer base {
+  html,
+  body {
+    overflow-x: clip;
+  }
+  html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--plane);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    line-height: 1.375rem;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1,
+  h2,
+  h3 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    overflow-wrap: break-word;
+    min-width: 0;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  ::selection {
+    background: var(--band);
+  }
+  textarea,
+  input,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+@layer components {
+  /* Chiffres alignés : uniquement dans les colonnes et les axes */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 2.25rem;
+    padding: 0 0.8rem;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--dur-micro) ease,
+      border-color var(--dur-micro) ease,
+      opacity var(--dur-micro) ease;
+  }
+  .btn:hover {
+    background: var(--sunken);
+  }
+  .btn:active {
+    border-color: var(--ink-3);
+  }
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+  }
+  .btn-primary:hover {
+    background: var(--ink-2);
+    border-color: var(--ink-2);
+  }
+  .btn-quiet {
+    border-color: transparent;
+    background: transparent;
+  }
+  .field {
+    width: 100%;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    transition: border-color var(--dur-micro) ease;
+  }
+  .field:hover {
+    border-color: var(--ink-3);
+  }
+  .field::placeholder {
+    color: var(--ink-3);
+  }
+  .field[aria-invalid="true"] {
+    border-color: var(--critical);
+  }
+  .label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--ink-2);
+  }
+  .skeleton {
+    background: var(--sunken);
+    border-radius: var(--radius-control);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: var(--surface);
+  }
+}

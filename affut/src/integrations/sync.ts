@@ -1,0 +1,96 @@
+import 'server-only';
+import { eq, sql } from 'drizzle-orm';
+import { addDays, todayISO } from '@/core/dates';
+import { computeLoad } from '@/core/load';
+import { getDb, type Db } from '@/db/client';
+import { activities, athletes, connections, plannedWorkouts, wellnessDays } from '@/db/schema';
+import { decrypt, encrypt } from './crypto';
+import type { Credentials } from './provider';
+import { PROVIDERS } from './registry';
+
+const INITIAL_BACKFILL_DAYS = 180;
+const OVERLAP_DAYS = 7;
+const PLAN_HORIZON_DAYS = 21;
+
+export interface SyncResult {
+  connectionId: string;
+  ok: boolean;
+  activities: number;
+  error?: string;
+}
+
+/**
+ * Synchronise une connexion : import incrémental et idempotent (clé source + identifiant externe),
+ * calcul de la charge avec les seuils de l'athlète, puis invalidation des analyses en cache.
+ */
+export async function syncConnection(db: Db, connectionId: string): Promise<SyncResult> {
+  const [row] = await db.select({ connection: connections, athlete: athletes }).from(connections).innerJoin(athletes, eq(athletes.id, connections.athleteId)).where(eq(connections.id, connectionId)).limit(1);
+  if (!row) return { connectionId, ok: false, activities: 0, error: 'Connexion introuvable.' };
+  const { connection, athlete } = row;
+  const provider = PROVIDERS[connection.provider];
+  if (!provider) return { connectionId, ok: false, activities: 0, error: `Aucun connecteur pour « ${connection.provider} ».` };
+
+  try {
+    let credentials: Credentials = {
+      externalAthleteId: connection.externalAthleteId,
+      accessToken: connection.accessTokenEnc ? decrypt(connection.accessTokenEnc) : null,
+      refreshToken: connection.refreshTokenEnc ? decrypt(connection.refreshTokenEnc) : null,
+      expiresAt: connection.tokenExpiresAt,
+    };
+    const refreshed = await provider.refresh?.(credentials);
+    if (refreshed) {
+      credentials = { ...credentials, ...refreshed };
+      await db.update(connections).set({ accessTokenEnc: encrypt(refreshed.accessToken), refreshTokenEnc: encrypt(refreshed.refreshToken), tokenExpiresAt: refreshed.expiresAt }).where(eq(connections.id, connectionId));
+    }
+
+    const today = todayISO();
+    const since = connection.lastSyncAt ? addDays(connection.lastSyncAt.toISOString().slice(0, 10), -OVERLAP_DAYS) : addDays(today, -INITIAL_BACKFILL_DAYS);
+
+    const fetched = await provider.fetchActivities(credentials, since, today);
+    for (const a of fetched) {
+      const computed = computeLoad(a, athlete);
+      const mutable = { ...a, load: computed.load, intensityFactor: computed.intensityFactor, loadMethod: computed.method };
+      await db
+        .insert(activities)
+        .values({ ...mutable, athleteId: athlete.id, source: provider.id })
+        .onConflictDoUpdate({ target: [activities.athleteId, activities.source, activities.externalId], set: mutable });
+    }
+
+    for (const w of (await provider.fetchWellness?.(credentials, since, today)) ?? []) {
+      await db.insert(wellnessDays).values({ ...w, athleteId: athlete.id }).onConflictDoUpdate({ target: [wellnessDays.athleteId, wellnessDays.date], set: w });
+    }
+
+    const planned = await provider.fetchPlannedWorkouts?.(credentials, since, addDays(today, PLAN_HORIZON_DAYS));
+    if (planned) {
+      // Le plan de la plateforme fait foi : on remplace la fenêtre synchronisée.
+      await db.transaction(async (tx) => {
+        await tx.delete(plannedWorkouts).where(sql`${plannedWorkouts.athleteId} = ${athlete.id} and ${plannedWorkouts.date} >= ${since}`);
+        if (planned.length) {
+          await tx.insert(plannedWorkouts).values(
+            planned.map((p) => ({ athleteId: athlete.id, date: p.date, sport: p.sport, kind: p.kind, title: p.title, durationS: p.durationS, load: p.load ?? computeLoad({ sport: p.sport, durationS: p.durationS }, athlete).load, isKey: p.kind === 'vo2' || p.kind === 'threshold' || p.kind === 'long' })),
+          );
+        }
+      });
+    }
+
+    await db.update(connections).set({ status: 'active', lastSyncAt: new Date(), lastError: null }).where(eq(connections.id, connectionId));
+    await db.update(athletes).set({ dataUpdatedAt: new Date() }).where(eq(athletes.id, athlete.id));
+    return { connectionId, ok: true, activities: fetched.length };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erreur inconnue.';
+    await db.update(connections).set({ status: 'error', lastError: message }).where(eq(connections.id, connectionId));
+    return { connectionId, ok: false, activities: 0, error: message };
+  }
+}
+
+/** Synchronise toutes les connexions actives ; appelé par la tâche planifiée. */
+export async function syncAll(): Promise<SyncResult[]> {
+  const db = await getDb();
+  const rows = await db.select({ id: connections.id, provider: connections.provider }).from(connections).where(eq(connections.status, 'active'));
+  const results: SyncResult[] = [];
+  for (const row of rows) {
+    if (!PROVIDERS[row.provider]) continue; // connexions de démonstration
+    results.push(await syncConnection(db, row.id));
+  }
+  return results;
+}
