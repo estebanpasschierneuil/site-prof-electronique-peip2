@@ -5,6 +5,7 @@
 :root {
   color-scheme: light;
   --font-ui: "IBM Plex Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Surfaces et encres */
   --plane: #f6f6f3;
@@ -178,6 +179,11 @@
     outline-offset: 2px;
     border-radius: 3px;
   }
+  code {
+    font-family: var(--font-code);
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+  }
   ::selection {
     background: var(--band);
   }
@@ -196,6 +202,9 @@
     font-variant-numeric: tabular-nums;
   }
   .panel {
+    /* Contient les éléments positionnés (texte réservé aux lecteurs d'écran, liens étendus)
+       quand le panneau défile horizontalement. */
+    position: relative;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--radius-panel);

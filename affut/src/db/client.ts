@@ -30,7 +30,7 @@ async function connect(): Promise<Db> {
     const { drizzle } = await import('drizzle-orm/postgres-js');
     const { migrate } = await import('drizzle-orm/postgres-js/migrator');
     const postgres = (await import('postgres')).default;
-    const instance = drizzle(postgres(env.DATABASE_URL, { max: 10, idle_timeout: 30 }), { schema });
+    const instance = drizzle(postgres(env.DATABASE_URL, { max: 10, idle_timeout: 30, onnotice: () => {} }), { schema });
     if (env.AUTO_MIGRATE) await migrate(instance, { migrationsFolder: MIGRATIONS });
     db = instance as unknown as Db;
   } else {
@@ -39,7 +39,7 @@ async function connect(): Promise<Db> {
     const { migrate } = await import('drizzle-orm/pglite/migrator');
     let dataDir: string | undefined;
     if (env.PGLITE_DIR !== 'memory') {
-      dataDir = path.resolve(process.cwd(), env.PGLITE_DIR);
+      dataDir = path.resolve(/* turbopackIgnore: true */ process.cwd(), env.PGLITE_DIR);
       mkdirSync(dataDir, { recursive: true });
     }
     const instance = drizzle(new PGlite(dataDir), { schema });

@@ -6,7 +6,8 @@ import { ReviewToggle } from '@/components/review-toggle';
 import { STATUS_LABEL, StatusIcon } from '@/components/status';
 import { WeekNav } from '@/components/week-nav';
 import { formatInt, formatPct, formatSigned } from '@/core/format';
-import type { WeekStatus } from '@/core/types';
+import { TRI_SPORTS, type WeekStatus } from '@/core/types';
+import { SportMark } from '@/components/sport';
 import { getWeekReview, type AthleteWeek } from '@/server/analysis';
 import { requireUser } from '@/server/auth';
 import { DISTANCE_LABEL, resolveWeek } from '@/server/week';
@@ -87,6 +88,13 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
           ))}
         </nav>
         <div className="ml-auto flex flex-wrap items-center gap-3">
+          <ul className="hidden items-center gap-3 text-sm text-ink-2 md:flex" aria-label="Couleurs des sports dans la colonne Charge">
+            {TRI_SPORTS.map((s) => (
+              <li key={s}>
+                <SportMark sport={s} />
+              </li>
+            ))}
+          </ul>
           <p className="text-sm text-ink-2 tnum" aria-live="polite">
             {reviewed} sur {scoped.length} revus
           </p>
@@ -101,7 +109,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
               Rechercher un athlète
             </label>
             <Search size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3" aria-hidden="true" />
-            <input id="q" name="q" type="search" defaultValue={query} placeholder="Rechercher un athlète" className="field w-52 pl-8" />
+            <input id="q" name="q" type="search" defaultValue={query} placeholder="Rechercher un athlète" className="field w-44 pl-8 sm:w-52" />
           </form>
         </div>
       </div>
@@ -129,15 +137,15 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
                   <p className="text-sm text-ink-3">{GROUP_HINT[s]}</p>
                 </div>
                 <div className="panel overflow-x-auto">
-                  <table className="w-full min-w-[60rem] border-collapse text-left">
+                  <table className="w-full border-collapse text-left md:min-w-[60rem]">
                     <thead>
                       <tr className="border-b border-line text-sm text-ink-3">
-                        <th scope="col" className="w-[19%] px-4 py-2 font-medium">Athlète</th>
+                        <th scope="col" className="w-[36%] px-4 py-2 font-medium md:w-[19%]">Athlète</th>
                         <th scope="col" className="px-3 py-2 font-medium">Constat</th>
-                        <th scope="col" className="w-[15%] px-3 py-2 font-medium">Charge</th>
-                        <th scope="col" className="w-[9%] px-3 py-2 font-medium">Fraîcheur</th>
-                        <th scope="col" className="w-[10%] px-3 py-2 font-medium">Préparation</th>
-                        <th scope="col" className="w-[8%] px-3 py-2 font-medium">8 semaines</th>
+                        <th scope="col" className="hidden w-[15%] px-3 py-2 font-medium md:table-cell">Charge</th>
+                        <th scope="col" className="hidden w-[9%] px-3 py-2 font-medium md:table-cell">Fraîcheur</th>
+                        <th scope="col" className="hidden w-[10%] px-3 py-2 font-medium md:table-cell">Préparation</th>
+                        <th scope="col" className="hidden w-[8%] px-3 py-2 font-medium md:table-cell">8 semaines</th>
                         <th scope="col" className="w-12 px-3 py-2 font-medium">
                           <span className="sr-only">Revue</span>
                         </th>
@@ -190,7 +198,7 @@ function ReviewRow({ row, week, isDefaultWeek }: { row: AthleteWeek; week: strin
         <div className="line-clamp-2 text-sm text-ink-2">{a.insights[0]?.detail ?? a.summary}</div>
         {others > 0 ? <div className="mt-0.5 text-sm text-ink-3">et {others} autre{others > 1 ? 's' : ''} signal{others > 1 ? 'ements' : 'ement'}</div> : null}
       </td>
-      <td className="px-3 py-3">
+      <td className="hidden px-3 py-3 md:table-cell">
         <div className="tnum">
           <span className="font-medium">{formatInt(a.load.done)}</span>
           {a.load.planned > 0 ? <span className="text-ink-3"> / {formatInt(a.load.planned)}</span> : null}
@@ -200,11 +208,11 @@ function ReviewRow({ row, week, isDefaultWeek }: { row: AthleteWeek; week: strin
         </div>
         <div className="mt-1 text-sm text-ink-3 tnum">{a.compliance.loadPct !== null ? `${formatPct(a.compliance.loadPct)} du plan` : 'Sans plan'}</div>
       </td>
-      <td className="px-3 py-3 tnum">
+      <td className="hidden px-3 py-3 tnum md:table-cell">
         <div className="font-medium">{formatSigned(a.fitness.tsb)}</div>
         <div className="text-sm text-ink-3">CTL {formatInt(a.fitness.ctl)}, {formatSigned(a.fitness.ramp, 1)}</div>
       </td>
-      <td className="px-3 py-3">
+      <td className="hidden px-3 py-3 md:table-cell">
         {a.recovery.readiness !== null ? (
           <>
             <div className="tnum">
@@ -219,7 +227,7 @@ function ReviewRow({ row, week, isDefaultWeek }: { row: AthleteWeek; week: strin
           <span className="text-sm text-ink-3">Pas de données</span>
         )}
       </td>
-      <td className="px-3 py-3">
+      <td className="hidden px-3 py-3 md:table-cell">
         <Sparkbars values={a.series.weeks.slice(-8).map((w) => w.load)} label={`Charge des 8 dernières semaines : ${a.series.weeks.slice(-8).map((w) => formatInt(w.load)).join(', ')}`} />
       </td>
       <td className="relative z-10 px-3 py-3">

@@ -4,6 +4,8 @@ const config: NextConfig = {
   output: 'standalone',
   // PGlite embarque du WASM : on le laisse hors du bundle serveur.
   serverExternalPackages: ['@electric-sql/pglite'],
+  // Les migrations SQL sont lues au démarrage : elles doivent suivre le serveur autonome.
+  outputFileTracingIncludes: { '/*': ['./drizzle/**/*'] },
   poweredByHeader: false,
   async headers() {
     return [

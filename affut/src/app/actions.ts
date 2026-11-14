@@ -17,16 +17,23 @@ import { env } from '@/server/env';
 export interface FormState {
   error?: string;
   ok?: string;
+  /** Saisie renvoyée après une erreur : le formulaire ne se vide pas. */
+  values?: Record<string, string>;
+}
+
+function echo(form: FormData, keys: readonly string[]): Record<string, string> {
+  return Object.fromEntries(keys.map((k) => [k, typeof form.get(k) === 'string' ? (form.get(k) as string) : '']));
 }
 
 const credentials = z.object({ email: z.string().trim().email(), password: z.string().min(1) });
 
 export async function login(_prev: FormState, form: FormData): Promise<FormState> {
   const parsed = credentials.safeParse({ email: form.get('email'), password: form.get('password') });
-  if (!parsed.success) return { error: 'Saisissez une adresse e-mail valide et votre mot de passe.' };
+  const values = echo(form, ['email']);
+  if (!parsed.success) return { error: 'Saisissez une adresse e-mail valide et votre mot de passe.', values };
   const result = await authenticate(parsed.data.email, parsed.data.password);
   if (!result.ok) {
-    return { error: result.reason === 'throttled' ? 'Trop de tentatives. Réessayez dans quelques minutes.' : 'Adresse e-mail ou mot de passe incorrect.' };
+    return { error: result.reason === 'throttled' ? 'Trop de tentatives. Réessayez dans quelques minutes.' : 'Adresse e-mail ou mot de passe incorrect.', values };
   }
   await createSession(result.userId);
   redirect('/');
@@ -55,7 +62,8 @@ export async function toggleReviewed(form: FormData): Promise<void> {
   revalidatePath('/');
   revalidatePath(`/athletes/${athleteId}`);
   const next = form.get('next');
-  if (typeof next === 'string' && next.startsWith('/') && !next.startsWith('//')) redirect(next);
+  // Redirection interne uniquement : jamais vers une adresse fournie telle quelle.
+  if (typeof next === 'string' && /^\/(?![\/\\])/.test(next)) redirect(next);
 }
 
 export async function saveCoachNote(_prev: FormState, form: FormData): Promise<FormState> {
@@ -89,8 +97,10 @@ const athleteSchema = z.object({
   restHr: optionalInt(30, 90),
 });
 
+const ATHLETE_FIELDS = ['firstName', 'lastName', 'email', 'distance', 'ftpW', 'runThresholdPaceS', 'swimCssS', 'lthr', 'restHr'] as const;
+
 function readAthlete(form: FormData) {
-  return athleteSchema.safeParse(Object.fromEntries(['firstName', 'lastName', 'email', 'distance', 'ftpW', 'runThresholdPaceS', 'swimCssS', 'lthr', 'restHr'].map((k) => [k, form.get(k)])));
+  return athleteSchema.safeParse(Object.fromEntries(ATHLETE_FIELDS.map((k) => [k, form.get(k)])));
 }
 
 const ATHLETE_ERROR = 'Vérifiez les champs : nom et prénom requis, allures au format min:s (4:15), valeurs physiologiques plausibles.';
@@ -98,7 +108,7 @@ const ATHLETE_ERROR = 'Vérifiez les champs : nom et prénom requis, allures au 
 export async function createAthlete(_prev: FormState, form: FormData): Promise<FormState> {
   const user = await requireUser();
   const parsed = readAthlete(form);
-  if (!parsed.success) return { error: ATHLETE_ERROR };
+  if (!parsed.success) return { error: ATHLETE_ERROR, values: echo(form, ATHLETE_FIELDS) };
   const db = await getDb();
   const [created] = await db.insert(athletes).values({ ...parsed.data, orgId: user.org.id, coachId: user.id }).returning({ id: athletes.id });
   revalidatePath('/athletes');
@@ -110,12 +120,12 @@ export async function updateAthlete(_prev: FormState, form: FormData): Promise<F
   const athleteId = z.string().uuid().parse(form.get('athleteId'));
   await assertAthleteInOrg(user.org.id, athleteId);
   const parsed = readAthlete(form);
-  if (!parsed.success) return { error: ATHLETE_ERROR };
+  if (!parsed.success) return { error: ATHLETE_ERROR, values: echo(form, ATHLETE_FIELDS) };
   const db = await getDb();
   // Les seuils changent la charge : les analyses en cache sont invalidées.
   await db.update(athletes).set({ ...parsed.data, dataUpdatedAt: new Date() }).where(eq(athletes.id, athleteId));
   revalidatePath('/', 'layout');
-  return { ok: 'Profil enregistré. Les analyses seront recalculées avec ces seuils.' };
+  return { ok: 'Profil enregistré. Les analyses seront recalculées avec ces seuils.', values: echo(form, ATHLETE_FIELDS) };
 }
 
 const raceSchema = z.object({ athleteId: z.string().uuid(), name: z.string().trim().min(2).max(80), date: z.string().refine(isValidISODate), distance: z.enum(['S', 'M', 'L', 'XL']), priority: z.enum(['A', 'B', 'C']) });
@@ -123,7 +133,7 @@ const raceSchema = z.object({ athleteId: z.string().uuid(), name: z.string().tri
 export async function addRace(_prev: FormState, form: FormData): Promise<FormState> {
   const user = await requireUser();
   const parsed = raceSchema.safeParse(Object.fromEntries(['athleteId', 'name', 'date', 'distance', 'priority'].map((k) => [k, form.get(k)])));
-  if (!parsed.success) return { error: 'Indiquez le nom, la date, le format et la priorité de la course.' };
+  if (!parsed.success) return { error: 'Indiquez le nom, la date, le format et la priorité de la course.', values: echo(form, ['name', 'date', 'distance', 'priority']) };
   await assertAthleteInOrg(user.org.id, parsed.data.athleteId);
   const db = await getDb();
   await db.insert(races).values(parsed.data);

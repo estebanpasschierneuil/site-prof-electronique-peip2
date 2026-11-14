@@ -290,8 +290,8 @@ export default async function AthletePage({ params, searchParams }: { params: Pr
           <p className="mb-3 text-sm text-ink-3">Brouillon rédigé à partir de l’analyse. Relisez, ajustez, puis copiez-le dans votre messagerie.</p>
           <MessageDraft key={`${id}-${week}`} initial={a.message} />
         </section>
-        <section className="panel p-5" aria-labelledby="note">
-          <h2 id="note" className="text-lg">
+        <section className="panel p-5" aria-labelledby="note-titre">
+          <h2 id="note-titre" className="text-lg">
             Note du coach
           </h2>
           <p className="mb-3 text-sm text-ink-3">Privée, rattachée à cette semaine, visible par les coachs de votre structure.</p>

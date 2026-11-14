@@ -1,12 +1,22 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { env } from '@/server/env';
 
+const globalForKey = globalThis as unknown as { __affutEphemeralKey?: Buffer };
+
+/** La clé de chiffrement est-elle utilisable sur ce déploiement ? */
+export function encryptionReady(): boolean {
+  return Boolean(env.APP_ENCRYPTION_KEY) || !env.isProduction || env.DEMO_MODE;
+}
+
 /** Les jetons des plateformes sont chiffrés au repos (AES-256-GCM). */
 function key(): Buffer {
   const raw = env.APP_ENCRYPTION_KEY;
   if (!raw) {
-    if (env.isProduction) throw new Error('APP_ENCRYPTION_KEY est requise pour connecter une plateforme.');
-    return Buffer.alloc(32, 'affut-dev-key');
+    // Développement : clé fixe, pour que les connexions survivent aux redémarrages.
+    if (!env.isProduction) return Buffer.alloc(32, 'affut-dev-key');
+    // Démonstration en production : clé éphémère, propre au processus.
+    if (env.DEMO_MODE) return (globalForKey.__affutEphemeralKey ??= randomBytes(32));
+    throw new Error('APP_ENCRYPTION_KEY est requise pour connecter une plateforme.');
   }
   const buffer = Buffer.from(raw, 'base64');
   if (buffer.length !== 32) throw new Error('APP_ENCRYPTION_KEY doit faire 32 octets encodés en base64.');

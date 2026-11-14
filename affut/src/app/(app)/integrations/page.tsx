@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Check, Minus } from 'lucide-react';
 import { todayISO } from '@/core/dates';
+import { encryptionReady } from '@/integrations/crypto';
 import { PROVIDER_LABELS, PROVIDERS } from '@/integrations/registry';
 import { requireUser } from '@/server/auth';
 import { env } from '@/server/env';
@@ -117,6 +118,11 @@ export default async function IntegrationsPage() {
             </tbody>
           </table>
         </div>
+        {!encryptionReady() ? (
+          <p className="mt-2 rounded-control bg-warning-soft p-3 text-warning-ink" role="status">
+            Configuration incomplète : définissez <code>APP_ENCRYPTION_KEY</code> pour pouvoir connecter des plateformes.
+          </p>
+        ) : null}
         {!PROVIDERS.strava.isConfigured() ? (
           <p className="mt-2 text-sm text-ink-3">
             Strava : créez une application sur strava.com/settings/api puis renseignez <code>STRAVA_CLIENT_ID</code> et <code>STRAVA_CLIENT_SECRET</code>. Adresse de retour : <code>{env.APP_URL}/api/integrations/strava/callback</code>

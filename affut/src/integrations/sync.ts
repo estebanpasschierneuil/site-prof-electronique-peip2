@@ -1,5 +1,5 @@
 import 'server-only';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { addDays, todayISO } from '@/core/dates';
 import { computeLoad } from '@/core/load';
 import { getDb, type Db } from '@/db/client';
@@ -86,10 +86,14 @@ export async function syncConnection(db: Db, connectionId: string): Promise<Sync
 /** Synchronise toutes les connexions actives ; appelé par la tâche planifiée. */
 export async function syncAll(): Promise<SyncResult[]> {
   const db = await getDb();
-  const rows = await db.select({ id: connections.id, provider: connections.provider }).from(connections).where(eq(connections.status, 'active'));
+  // Sans jeton enregistré (connexions de démonstration), il n'y a rien à interroger.
+  const rows = await db
+    .select({ id: connections.id, provider: connections.provider })
+    .from(connections)
+    .where(and(eq(connections.status, 'active'), isNotNull(connections.accessTokenEnc)));
   const results: SyncResult[] = [];
   for (const row of rows) {
-    if (!PROVIDERS[row.provider]) continue; // connexions de démonstration
+    if (!PROVIDERS[row.provider]) continue;
     results.push(await syncConnection(db, row.id));
   }
   return results;

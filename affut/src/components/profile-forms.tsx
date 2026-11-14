@@ -11,11 +11,11 @@ export function RaceForm({ athleteId }: { athleteId: string }) {
       <input type="hidden" name="athleteId" value={athleteId} />
       <div>
         <label className="label" htmlFor="race-name">Course</label>
-        <input className="field" id="race-name" name="name" placeholder="Half de Vichy" required />
+        <input className="field" id="race-name" name="name" placeholder="Half de Vichy" required defaultValue={state.values?.name ?? ''} />
       </div>
       <div>
         <label className="label" htmlFor="race-date">Date</label>
-        <input className="field" id="race-date" name="date" type="date" required />
+        <input className="field" id="race-date" name="date" type="date" required defaultValue={state.values?.date ?? ''} />
       </div>
       <div>
         <label className="label" htmlFor="race-distance">Format</label>

@@ -11,7 +11,7 @@ export function LoginForm() {
         <label className="label" htmlFor="email">
           Adresse e-mail
         </label>
-        <input className="field" id="email" name="email" type="email" autoComplete="username" required aria-invalid={Boolean(state.error)} aria-describedby={state.error ? 'login-error' : undefined} />
+        <input className="field" id="email" name="email" type="email" autoComplete="username" required defaultValue={state.values?.email ?? ''} aria-invalid={Boolean(state.error)} aria-describedby={state.error ? 'login-error' : undefined} />
       </div>
       <div>
         <label className="label" htmlFor="password">

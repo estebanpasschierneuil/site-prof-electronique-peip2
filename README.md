@@ -35,3 +35,9 @@ Les PDF et images restent hébergés sur le serveur d'origine (liens absolus ver
 remplacer ce préfixe par des chemins relatifs.
 
 Pour la visualiser en ligne : activer **GitHub Pages** sur ce dépôt (Settings → Pages → branche, dossier `/`).
+
+## Autre projet dans ce dépôt
+
+Le dossier [`affut/`](affut/) contient une application indépendante de cette page : **Affût**,
+un outil de revue hebdomadaire pour entraîneurs de triathlon (Next.js, TypeScript, Postgres).
+Voir [`affut/README.md`](affut/README.md).
