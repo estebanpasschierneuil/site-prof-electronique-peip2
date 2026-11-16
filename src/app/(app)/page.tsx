@@ -1,11 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
+import { validateOnTrack } from '@/app/actions';
 import { LoadBar, Meter, Sparkbars } from '@/components/charts/mini';
+import { CopyText } from '@/components/copy-text';
 import { ReviewToggle } from '@/components/review-toggle';
 import { STATUS_LABEL, StatusIcon } from '@/components/status';
 import { WeekNav } from '@/components/week-nav';
-import { formatInt, formatPct, formatSigned } from '@/core/format';
+import { buildDigest, TREND_LABEL } from '@/core/digest';
+import { formatDuration, formatInt, formatPct, formatSigned } from '@/core/format';
 import { TRI_SPORTS, type WeekStatus } from '@/core/types';
 import { SportMark } from '@/components/sport';
 import { getWeekReview, type AthleteWeek } from '@/server/analysis';
@@ -48,6 +51,8 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
   for (const row of scoped) counts[row.analysis.status]++;
   const visible = status ? scoped.filter((row) => row.analysis.status === status) : scoped;
   const reviewed = scoped.filter((row) => row.review?.reviewedAt).length;
+  const digest = buildDigest(scoped.map((row) => ({ name: `${row.athlete.firstName} ${row.athlete.lastName}`, analysis: row.analysis, trend: row.trend })), week, user.org.name);
+  const pendingOnTrack = all.filter((row) => row.analysis.status === 'ok' && !row.review?.reviewedAt).length;
   const isPartial = all[0]?.analysis.isPartial ?? week === currentWeek;
 
   if (all.length === 0) {
@@ -79,6 +84,51 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
         </div>
         <WeekNav weekStart={week} currentWeek={currentWeek} hrefFor={(w) => href({ week: w === defaultWeek ? undefined : w })} isPartial={isPartial} />
       </div>
+
+      <section className="panel grid lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" aria-labelledby="synthese">
+        <div className="p-5">
+          <h2 id="synthese" className="text-lg">
+            Synthèse du groupe
+          </h2>
+          <ul className="mt-2 space-y-1.5 text-ink-2">
+            <li>
+              <span className="font-medium text-ink">{formatDuration(digest.durationS)}</span> d’entraînement{digest.plannedDurationS > 0 ? ` sur ${formatDuration(digest.plannedDurationS)} prévues` : ''}, <span className="font-medium text-ink">{digest.sessionsDone}</span> séances
+              {digest.sessionsPlanned > 0 ? ` sur ${digest.sessionsPlanned}` : ''}
+              {digest.completion !== null ? ` (${formatPct(digest.completion)})` : ''}.
+            </li>
+            {digest.changes.length > 0 ? <li>Depuis la semaine dernière : {digest.changes.join(', ')}.</li> : null}
+            {digest.races.length > 0 ? (
+              <li>
+                Échéances sous 14 jours : {digest.races.map((r) => `${r.name} (${r.race}, dans ${r.daysTo} j)`).join(', ')}.
+              </li>
+            ) : null}
+            {digest.dataGaps.length > 0 ? (
+              <li>
+                Données incomplètes : {digest.dataGaps.map((g) => `${g.name} (${g.reason})`).join(', ')}.
+              </li>
+            ) : null}
+          </ul>
+        </div>
+        <div className="no-print flex flex-col justify-center gap-3 border-t border-line p-5 lg:border-l lg:border-t-0">
+          {pendingOnTrack > 0 ? (
+            <form action={validateOnTrack}>
+              <input type="hidden" name="weekStart" value={week} />
+              <button type="submit" className="btn btn-primary w-full">
+                Valider les {pendingOnTrack} athlètes sur les rails
+              </button>
+              <p className="mt-1.5 text-sm text-ink-3">Aucun signal chez eux : il ne vous reste que les cas qui demandent votre regard.</p>
+            </form>
+          ) : (
+            <p className="text-ink-2">Tous les athlètes sur les rails sont validés.</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <CopyText text={digest.text} label="Copier la synthèse" />
+            <Link href={`/retours${week === defaultWeek ? '' : `?week=${week}`}`} className="btn">
+              Préparer les retours
+            </Link>
+          </div>
+        </div>
+      </section>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-line pb-3">
         <nav aria-label="Filtrer par état" className="flex flex-wrap gap-1">
@@ -178,7 +228,7 @@ function FilterTab({ href, active, label, count, status }: { href: string; activ
 }
 
 function ReviewRow({ row, week, isDefaultWeek }: { row: AthleteWeek; week: string; isDefaultWeek: boolean }) {
-  const { athlete, analysis: a, review } = row;
+  const { athlete, analysis: a, review, trend } = row;
   const name = `${athlete.firstName} ${athlete.lastName}`;
   const detailHref = `/athletes/${athlete.id}${isDefaultWeek ? '' : `?week=${week}`}`;
   const others = a.insights.filter((i) => i.severity === 'critical' || i.severity === 'warning').length - 1;
@@ -196,7 +246,11 @@ function ReviewRow({ row, week, isDefaultWeek }: { row: AthleteWeek; week: strin
       <td className="px-3 py-3">
         <div className="font-medium">{a.headline}</div>
         <div className="line-clamp-2 text-sm text-ink-2">{a.insights[0]?.detail ?? a.summary}</div>
-        {others > 0 ? <div className="mt-0.5 text-sm text-ink-3">et {others} autre{others > 1 ? 's' : ''} signal{others > 1 ? 'ements' : 'ement'}</div> : null}
+        {others > 0 || trend ? (
+          <div className="mt-0.5 text-sm text-ink-3">
+            {[trend ? TREND_LABEL[trend] : null, others > 0 ? `${others} autre${others > 1 ? 's' : ''} signal${others > 1 ? 'ements' : 'ement'}` : null].filter(Boolean).join(', ')}
+          </div>
+        ) : null}
       </td>
       <td className="hidden px-3 py-3 md:table-cell">
         <div className="tnum">

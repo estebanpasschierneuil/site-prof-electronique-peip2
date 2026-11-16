@@ -288,7 +288,7 @@ export default async function AthletePage({ params, searchParams }: { params: Pr
             Retour à l’athlète
           </h2>
           <p className="mb-3 text-sm text-ink-3">Brouillon rédigé à partir de l’analyse. Relisez, ajustez, puis copiez-le dans votre messagerie.</p>
-          <MessageDraft key={`${id}-${week}`} initial={a.message} />
+          <MessageDraft key={`${id}-${week}`} initial={a.message} email={athlete.email} subject={`Bilan de ta semaine ${isoWeekNumber(a.weekStart)}`} />
         </section>
         <section className="panel p-5" aria-labelledby="note-titre">
           <h2 id="note-titre" className="text-lg">

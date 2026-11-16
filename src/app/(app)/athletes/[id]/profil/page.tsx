@@ -3,10 +3,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { AthleteForm } from '@/components/athlete-form';
+import { FileImport } from '@/components/file-import';
 import { CopyField, IntervalsForm, RaceForm } from '@/components/profile-forms';
 import { formatDateLong } from '@/core/format';
 import { encryptionReady, signToken } from '@/integrations/crypto';
-import { PROVIDER_LABELS, PROVIDERS } from '@/integrations/registry';
+import { oauthProviders, PROVIDER_LABELS } from '@/integrations/registry';
 import { requireUser } from '@/server/auth';
 import { env } from '@/server/env';
 import { getAthleteProfile } from '@/server/roster';
@@ -26,7 +27,8 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
   const created = (await searchParams).created === '1';
   const canConnect = encryptionReady();
   const inviteUrl = canConnect ? `${env.APP_URL}/connexion/${signToken({ athleteId: athlete.id }, INVITE_TTL)}` : null;
-  const stravaReady = PROVIDERS.strava.isConfigured();
+  const ready = oauthProviders().filter((p) => p.isConfigured());
+  const pendingSetup = oauthProviders().filter((p) => !p.isConfigured());
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -96,20 +98,26 @@ export default async function ProfilePage({ params, searchParams }: { params: Pr
             ))}
           </ul>
         ) : (
-          <p className="mb-5 mt-2 text-ink-2">Aucune source connectée : cet athlète n’apparaîtra dans la revue qu’avec des données.</p>
+          <p className="mb-5 mt-2 text-ink-2">Aucune source connectée. Plusieurs sources peuvent se cumuler : une séance reçue deux fois n’est comptée qu’une fois.</p>
         )}
 
         {inviteUrl ? (
           <>
         <h3 className="font-semibold">Lien à envoyer à l’athlète</h3>
         <p className="mb-2 text-sm text-ink-3">
-          L’athlète autorise lui-même l’accès à son compte Strava depuis ce lien, valable 14 jours. {stravaReady ? '' : 'Strava n’est pas encore configuré sur ce déploiement : le lien l’indiquera à l’athlète.'}
+          Depuis ce lien, valable 14 jours, l’athlète connecte lui-même toutes ses applications
+          {ready.length > 0 ? ` : ${ready.map((p) => p.label).join(', ')}.` : '.'}
+          {pendingSetup.length > 0 ? ` À activer sur ce déploiement : ${pendingSetup.map((p) => p.label).join(', ')}.` : ''}
         </p>
         <CopyField value={inviteUrl} label="Lien de connexion pour l’athlète" />
 
         <h3 className="mt-6 font-semibold">intervals.icu</h3>
         <p className="mb-3 text-sm text-ink-3">Source la plus complète : séances, temps par zone, récupération et plan d’entraînement.</p>
         <IntervalsForm athleteId={athlete.id} />
+
+        <h3 className="mt-6 font-semibold">Fichiers d’activité</h3>
+        <p className="mb-3 text-sm text-ink-3">Pour toute montre ou application sans connexion directe : exportez les séances et déposez-les ici. Garmin, COROS, Suunto, Zwift et Wahoo produisent des fichiers FIT.</p>
+        <FileImport athleteId={athlete.id} />
           </>
         ) : (
           <p className="rounded-control bg-warning-soft p-3 text-warning-ink" role="status">

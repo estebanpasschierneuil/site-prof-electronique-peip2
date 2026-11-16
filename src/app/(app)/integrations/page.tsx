@@ -3,23 +3,24 @@ import Link from 'next/link';
 import { Check, Minus } from 'lucide-react';
 import { todayISO } from '@/core/dates';
 import { encryptionReady } from '@/integrations/crypto';
+import { redirectUri } from '@/integrations/oauth';
 import { PROVIDER_LABELS, PROVIDERS } from '@/integrations/registry';
 import { requireUser } from '@/server/auth';
-import { env } from '@/server/env';
 import { listRoster } from '@/server/roster';
 
 export const metadata: Metadata = { title: 'Intégrations' };
 
-const SOURCES = [
-  { id: 'intervals', how: 'Clé d’API de l’athlète, saisie dans son profil.', note: 'Séances avec temps par zone, VFC, FC de repos, sommeil, ressenti et plan d’entraînement.' },
-  { id: 'strava', how: 'L’athlète autorise l’accès depuis le lien que vous lui envoyez.', note: 'Séances uniquement. À compléter par une autre source pour la récupération.' },
-] as const;
-
-const ROADMAP = [
-  { name: 'Garmin Connect', note: 'Séances, VFC nocturne, sommeil. Accès soumis à l’agrément du programme développeur Garmin.' },
-  { name: 'TrainingPeaks', note: 'Séances et plan. Accès soumis à un partenariat API.' },
-  { name: 'Polar, Wahoo, COROS', note: 'Séances ; récupération selon la marque.' },
-  { name: 'Import de fichiers FIT', note: 'Pour les athlètes sans compte connecté.' },
+/** Ce que chaque marque permet aujourd'hui, connexion directe ou non. */
+const COVERAGE: { brand: string; path: string; recovery: string }[] = [
+  { brand: 'Garmin', path: 'Via Strava ou intervals.icu, qui se synchronisent seuls avec Garmin Connect, ou fichiers FIT.', recovery: 'Via intervals.icu (VFC, sommeil, FC de repos).' },
+  { brand: 'Polar', path: 'Connexion directe.', recovery: 'Connexion directe (sommeil, Nightly Recharge).' },
+  { brand: 'Wahoo', path: 'Connexion directe, ou fichiers FIT.', recovery: 'Aucune : à compléter par une autre source.' },
+  { brand: 'COROS, Suunto', path: 'Via Strava ou intervals.icu, ou fichiers FIT.', recovery: 'Via intervals.icu (sommeil, FC de repos).' },
+  { brand: 'Zwift, Rouvy, TrainerRoad', path: 'Via Strava, ou fichiers FIT.', recovery: 'Sans objet.' },
+  { brand: 'Apple Watch', path: 'Via Strava.', recovery: 'Pas d’accès hors du téléphone.' },
+  { brand: 'WHOOP', path: 'Connexion directe.', recovery: 'Connexion directe (VFC, FC de repos, sommeil).' },
+  { brand: 'Oura', path: 'Sans objet (pas de séances).', recovery: 'Connexion directe (VFC, FC de repos, sommeil).' },
+  { brand: 'TrainingPeaks', path: 'Export FIT ou TCX, puis import de fichiers.', recovery: 'Non repris.' },
 ];
 
 function Yes({ value }: { value: boolean }) {
@@ -33,15 +34,19 @@ export default async function IntegrationsPage() {
   const broken = connections.filter((c) => c.status !== 'active');
   const without = roster.filter((entry) => entry.connections.length === 0);
   const count = (provider: string) => connections.filter((c) => c.provider === provider).length;
-  const demoSources = [...new Set(connections.map((c) => c.provider))].filter((p) => !PROVIDERS[p]);
+  const providers = Object.values(PROVIDERS);
+  const toConfigure = providers.filter((p) => p.auth === 'oauth' && !p.isConfigured());
+  const simulated = [...new Set(connections.filter((c) => user.org.isDemo).map((c) => c.provider))];
+  const active = connections.length - broken.length;
 
   return (
     <div className="space-y-8">
       <div>
         <p className="text-sm text-ink-3">Sources de données</p>
         <h1 className="text-2xl sm:text-3xl">
-          {connections.length - broken.length} connexion{connections.length - broken.length > 1 ? 's' : ''} active{connections.length - broken.length > 1 ? 's' : ''} sur {roster.length} athlète{roster.length > 1 ? 's' : ''}
+          {active} connexion{active > 1 ? 's' : ''} active{active > 1 ? 's' : ''} pour {roster.length} athlète{roster.length > 1 ? 's' : ''}
         </h1>
+        <p className="mt-2 max-w-3xl text-ink-2">Un athlète peut cumuler plusieurs sources : sa montre, son home trainer, sa bague. Affût réunit le tout, écarte les séances reçues en double et garde pour chaque mesure la source la plus fiable.</p>
       </div>
 
       {broken.length > 0 || without.length > 0 ? (
@@ -82,7 +87,7 @@ export default async function IntegrationsPage() {
 
       <section aria-labelledby="connecteurs">
         <h2 id="connecteurs" className="mb-2 text-lg">
-          Connecteurs disponibles
+          Connexions directes
         </h2>
         <div className="panel overflow-x-auto">
           <table className="w-full min-w-[52rem] border-collapse text-left">
@@ -98,23 +103,26 @@ export default async function IntegrationsPage() {
               </tr>
             </thead>
             <tbody>
-              {SOURCES.map((source) => {
-                const provider = PROVIDERS[source.id];
-                return (
-                  <tr key={source.id} className="border-b border-line align-top last:border-0">
-                    <th scope="row" className="px-4 py-3 font-normal">
-                      <div className="font-medium">{provider.label}</div>
-                      <div className="max-w-xs text-sm text-ink-3">{source.note}</div>
-                    </th>
-                    <td className="px-3 py-3"><Yes value={provider.capabilities.activities} /></td>
-                    <td className="px-3 py-3"><Yes value={provider.capabilities.wellness} /></td>
-                    <td className="px-3 py-3"><Yes value={provider.capabilities.plannedWorkouts} /></td>
-                    <td className="px-3 py-3 text-sm text-ink-2">{source.how}</td>
-                    <td className="px-3 py-3 text-sm">{provider.isConfigured() ? 'Prêt' : <span className="text-warning-ink">Identifiants d’application à renseigner</span>}</td>
-                    <td className="px-4 py-3 text-right tnum">{count(source.id)}</td>
-                  </tr>
-                );
-              })}
+              {providers.map((provider) => (
+                <tr key={provider.id} className="border-b border-line align-top">
+                  <th scope="row" className="px-4 py-2.5 font-medium">{provider.label}</th>
+                  <td className="px-3 py-2.5"><Yes value={provider.capabilities.activities} /></td>
+                  <td className="px-3 py-2.5"><Yes value={provider.capabilities.wellness} /></td>
+                  <td className="px-3 py-2.5"><Yes value={provider.capabilities.plannedWorkouts} /></td>
+                  <td className="px-3 py-2.5 text-sm text-ink-2">{provider.auth === 'oauth' ? 'L’athlète l’autorise depuis son lien d’invitation.' : 'Clé d’API de l’athlète, saisie dans son profil.'}</td>
+                  <td className="px-3 py-2.5 text-sm">{provider.isConfigured() ? 'Prêt' : <span className="text-warning-ink">Identifiants d’application à renseigner</span>}</td>
+                  <td className="px-4 py-2.5 text-right tnum">{count(provider.id)}</td>
+                </tr>
+              ))}
+              <tr className="align-top">
+                <th scope="row" className="px-4 py-2.5 font-medium">Fichiers FIT, TCX, GPX</th>
+                <td className="px-3 py-2.5"><Yes value /></td>
+                <td className="px-3 py-2.5"><Yes value={false} /></td>
+                <td className="px-3 py-2.5"><Yes value={false} /></td>
+                <td className="px-3 py-2.5 text-sm text-ink-2">Dépôt dans le profil de l’athlète, par lot.</td>
+                <td className="px-3 py-2.5 text-sm">Prêt</td>
+                <td className="px-4 py-2.5 text-right text-ink-3">–</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -123,40 +131,69 @@ export default async function IntegrationsPage() {
             Configuration incomplète : définissez <code>APP_ENCRYPTION_KEY</code> pour pouvoir connecter des plateformes.
           </p>
         ) : null}
-        {!PROVIDERS.strava.isConfigured() ? (
-          <p className="mt-2 text-sm text-ink-3">
-            Strava : créez une application sur strava.com/settings/api puis renseignez <code>STRAVA_CLIENT_ID</code> et <code>STRAVA_CLIENT_SECRET</code>. Adresse de retour : <code>{env.APP_URL}/api/integrations/strava/callback</code>
-          </p>
+        {toConfigure.length > 0 ? (
+          <details className="mt-2 text-sm text-ink-2">
+            <summary className="cursor-pointer hover:text-ink">Activer {toConfigure.map((p) => p.label).join(', ')}</summary>
+            <p className="mt-2">Créez une application développeur chez chaque plateforme, puis renseignez ses identifiants dans les variables d’environnement du serveur.</p>
+            <ul className="mt-2 space-y-1">
+              {toConfigure.map((p) => (
+                <li key={p.id}>
+                  <span className="font-medium text-ink">{p.label}</span> : <code>{p.id.toUpperCase()}_CLIENT_ID</code>, <code>{p.id.toUpperCase()}_CLIENT_SECRET</code>, adresse de retour <code>{redirectUri(p.id)}</code>
+                </li>
+              ))}
+            </ul>
+          </details>
         ) : null}
-        {demoSources.length > 0 ? (
-          <p className="mt-2 text-sm text-ink-3">
-            Démonstration : les connexions des athlètes fictifs ({demoSources.map((p) => PROVIDER_LABELS[p] ?? p).join(', ')}, Strava, intervals.icu) sont simulées et ne contactent aucune plateforme.
-          </p>
+        {simulated.length > 0 ? (
+          <p className="mt-2 text-sm text-ink-3">Démonstration : les connexions des athlètes fictifs ({simulated.map((p) => PROVIDER_LABELS[p] ?? p).join(', ')}) sont simulées et ne contactent aucune plateforme.</p>
         ) : null}
       </section>
 
-      <section aria-labelledby="synchro" className="grid gap-6 lg:grid-cols-2">
+      <section aria-labelledby="couverture">
+        <h2 id="couverture" className="text-lg">
+          Quelle que soit la montre de l’athlète
+        </h2>
+        <p className="mb-2 mt-1 max-w-3xl text-ink-2">Toutes les marques n’ouvrent pas leurs données de la même façon. Voici le chemin qui fonctionne aujourd’hui pour chacune.</p>
+        <div className="panel overflow-x-auto">
+          <table className="w-full min-w-[46rem] border-collapse text-left">
+            <thead>
+              <tr className="border-b border-line text-sm text-ink-3">
+                <th scope="col" className="w-[22%] px-4 py-2 font-medium">Marque</th>
+                <th scope="col" className="px-3 py-2 font-medium">Séances</th>
+                <th scope="col" className="w-[34%] px-4 py-2 font-medium">Récupération</th>
+              </tr>
+            </thead>
+            <tbody>
+              {COVERAGE.map((row) => (
+                <tr key={row.brand} className="border-b border-line align-top last:border-0">
+                  <th scope="row" className="px-4 py-2.5 font-medium">{row.brand}</th>
+                  <td className="px-3 py-2.5 text-ink-2">{row.path}</td>
+                  <td className="px-4 py-2.5 text-ink-2">{row.recovery}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 max-w-3xl text-sm text-ink-3">Les connexions directes à Garmin, COROS, Suunto et TrainingPeaks passent par un agrément de chaque marque : elles ne sont pas développées. Dites-nous laquelle vous manque le plus.</p>
+      </section>
+
+      <section aria-labelledby="fusion" className="grid gap-6 lg:grid-cols-2">
         <div>
-          <h2 id="synchro" className="mb-2 text-lg">
-            Synchronisation
+          <h2 id="fusion" className="mb-2 text-lg">
+            Comment les sources sont réunies
           </h2>
           <div className="panel space-y-2 p-5 text-ink-2">
-            <p>Les nouvelles séances sont importées par une tâche planifiée, chaque heure. L’import est incrémental et ne crée jamais de doublon.</p>
-            <p>La charge de chaque séance est recalculée avec les seuils de l’athlète, quelle que soit la plateforme : deux athlètes sur deux sources différentes restent comparables.</p>
-            <p>Les jetons d’accès sont chiffrés avant d’être enregistrés et ne sont jamais affichés.</p>
+            <p>Une séance reçue par deux applications (la montre et Strava, par exemple) est reconnue à son horaire et à sa durée. Une seule version est analysée : celle qui contient la puissance, les zones et la fréquence cardiaque.</p>
+            <p>Pour la récupération, chaque mesure vient de la source la plus fiable : le capteur porté la nuit pour la VFC et le sommeil, le questionnaire pour le ressenti.</p>
+            <p>La charge est recalculée avec les seuils de l’athlète, quelle que soit l’origine : deux athlètes sur deux applications différentes restent comparables.</p>
           </div>
         </div>
         <div>
-          <h2 className="mb-2 text-lg">Sources envisagées</h2>
-          <ul className="panel divide-y divide-line">
-            {ROADMAP.map((item) => (
-              <li key={item.name} className="p-4">
-                <p className="font-medium">{item.name}</p>
-                <p className="text-sm text-ink-2">{item.note}</p>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-sm text-ink-3">Pas encore développées. Dites-nous laquelle vous manque le plus.</p>
+          <h2 className="mb-2 text-lg">Synchronisation</h2>
+          <div className="panel space-y-2 p-5 text-ink-2">
+            <p>Les nouvelles données sont importées par une tâche planifiée, chaque heure. L’import est incrémental et ne crée jamais de doublon.</p>
+            <p>Les jetons d’accès sont chiffrés avant d’être enregistrés et ne sont jamais affichés. Un athlète qui retire son accès apparaît ici, dans « À traiter ».</p>
+          </div>
         </div>
       </section>
     </div>

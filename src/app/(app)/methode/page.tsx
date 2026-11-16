@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { READINESS_WEIGHTS, THRESHOLDS as T } from '@/core/config';
 import { formatNumber, formatPct } from '@/core/format';
+import { HR_ZONE_BOUNDS } from '@/core/sources';
 import { requireUser } from '@/server/auth';
 
 export const metadata: Metadata = { title: 'Méthode' };
@@ -102,6 +103,18 @@ export default async function MethodPage() {
           </div>
         </section>
       ))}
+
+      <section aria-labelledby="sources">
+        <h2 id="sources" className="text-lg">
+          Quand un athlète a plusieurs sources
+        </h2>
+        <div className="panel mt-2 space-y-2 p-5 text-ink-2">
+          <p>Deux enregistrements sont tenus pour la même séance quand ils viennent de sources différentes, concernent le même sport et se recouvrent sur au moins 70 % de la plus courte, pour des durées comparables. Sans heure de départ, la comparaison se fait sur le jour, la durée et la distance.</p>
+          <p>La version analysée est la plus complète : puissance d’abord, puis temps par zone, fréquence cardiaque et distance. À contenu égal, l’enregistrement le plus proche de l’appareil l’emporte. Les autres versions sont conservées mais écartées des calculs.</p>
+          <p>Pour la récupération, la VFC, la FC de repos et le sommeil viennent en priorité du capteur porté la nuit (bague, bracelet, puis montre) ; le ressenti vient du questionnaire.</p>
+          <p>Pour un fichier importé, le temps par zone est calculé à partir de la FC au seuil de l’athlète : zone 1 sous {pct(HR_ZONE_BOUNDS[0])}, zone 2 jusqu’à {pct(HR_ZONE_BOUNDS[1])}, zone 3 jusqu’à {pct(HR_ZONE_BOUNDS[2])}, zone 4 jusqu’à {pct(HR_ZONE_BOUNDS[3])}, zone 5 au-delà.</p>
+        </div>
+      </section>
 
       <section aria-labelledby="semaine-suivante">
         <h2 id="semaine-suivante" className="text-lg">

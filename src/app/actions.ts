@@ -10,7 +10,8 @@ import { DEMO_EMAIL } from '@/db/seed';
 import { athletes, connections, races, users } from '@/db/schema';
 import { encrypt } from '@/integrations/crypto';
 import { syncConnection } from '@/integrations/sync';
-import { assertAthleteInOrg, saveNote, setReviewed } from '@/server/analysis';
+import { assertAthleteInOrg, reviewAllOnTrack, saveNote, setReviewed } from '@/server/analysis';
+import { resolveWeek } from '@/server/week';
 import { authenticate, createSession, destroySession, requireUser } from '@/server/auth';
 import { env } from '@/server/env';
 
@@ -59,11 +60,18 @@ export async function toggleReviewed(form: FormData): Promise<void> {
   const user = await requireUser();
   const { athleteId, weekStart } = weekRef.parse({ athleteId: form.get('athleteId'), weekStart: form.get('weekStart') });
   await setReviewed(user.org.id, athleteId, weekStart, user.id, form.get('reviewed') === 'true');
-  revalidatePath('/');
-  revalidatePath(`/athletes/${athleteId}`);
+  revalidatePath('/', 'layout');
   const next = form.get('next');
   // Redirection interne uniquement : jamais vers une adresse fournie telle quelle.
   if (typeof next === 'string' && /^\/(?![\/\\])/.test(next)) redirect(next);
+}
+
+export async function validateOnTrack(form: FormData): Promise<void> {
+  const user = await requireUser();
+  const weekStart = z.string().refine(isValidISODate).parse(form.get('weekStart'));
+  const { today, week } = resolveWeek(weekStart, user.org.timezone);
+  await reviewAllOnTrack(user.org.id, week, today, user.id);
+  revalidatePath('/', 'layout');
 }
 
 export async function saveCoachNote(_prev: FormState, form: FormData): Promise<FormState> {

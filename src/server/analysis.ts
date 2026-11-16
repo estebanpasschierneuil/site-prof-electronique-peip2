@@ -2,6 +2,7 @@ import 'server-only';
 import { and, asc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
 import { analyzeWeek } from '@/core/analyze';
 import { ENGINE_VERSION } from '@/core/config';
+import { trendOf, type Trend } from '@/core/digest';
 import { addDays, weekEnd, type ISODate } from '@/core/dates';
 import type { Activity, PlannedWorkout, Race, WeeklyAnalysis, WellnessDay } from '@/core/types';
 import { getDb, type Db } from '@/db/client';
@@ -15,6 +16,8 @@ export interface AthleteWeek {
   athlete: AthleteRow & { coachName: string | null };
   analysis: WeeklyAnalysis;
   review: { reviewedAt: Date | null; note: string } | null;
+  /** Évolution par rapport à la semaine précédente (renseignée dans la revue de groupe). */
+  trend: Trend;
 }
 
 function groupBy<T extends { athleteId: string }>(rows: T[]): Map<string, T[]> {
@@ -112,16 +115,22 @@ export async function getWeekReview(orgId: string, weekStart: ISODate, today: IS
   if (rows.length === 0) return [];
 
   const ids = rows.map((r) => r.athlete.id);
+  const athleteRows = rows.map((r) => r.athlete);
   const [analyses, reviews] = await Promise.all([
-    loadAnalyses(db, rows.map((r) => r.athlete), weekStart, today),
+    loadAnalyses(db, athleteRows, weekStart, today),
     db.select().from(weeklyReviews).where(and(inArray(weeklyReviews.athleteId, ids), eq(weeklyReviews.weekStart, weekStart))),
   ]);
+  // La semaine précédente dit si un signal est nouveau, s'il persiste ou s'il est résolu.
+  const previous = await loadAnalyses(db, athleteRows, addDays(weekStart, -7), today);
   const reviewBy = new Map(reviews.map((r) => [r.athleteId, r]));
 
   return rows
     .map(({ athlete, coachName }) => {
       const review = reviewBy.get(athlete.id);
-      return { athlete: { ...athlete, coachName }, analysis: analyses.get(athlete.id)!, review: review ? { reviewedAt: review.reviewedAt, note: review.note } : null };
+      const analysis = analyses.get(athlete.id)!;
+      const before = previous.get(athlete.id);
+      const trend = before && before.fitness.historyDays >= 7 ? trendOf(analysis.status, before.status) : null;
+      return { athlete: { ...athlete, coachName }, analysis, review: review ? { reviewedAt: review.reviewedAt, note: review.note } : null, trend };
     })
     .sort((a, b) => STATUS_RANK[a.analysis.status] - STATUS_RANK[b.analysis.status] || b.analysis.priority - a.analysis.priority || a.athlete.lastName.localeCompare(b.athlete.lastName, 'fr'));
 }
@@ -139,7 +148,7 @@ export async function getAthleteWeek(orgId: string, athleteId: string, weekStart
     loadAnalyses(db, [row.athlete], weekStart, today),
     db.select().from(weeklyReviews).where(and(eq(weeklyReviews.athleteId, athleteId), eq(weeklyReviews.weekStart, weekStart))).limit(1),
   ]);
-  return { athlete: { ...row.athlete, coachName: row.coachName }, analysis: analyses.get(athleteId)!, review: review ? { reviewedAt: review.reviewedAt, note: review.note } : null };
+  return { athlete: { ...row.athlete, coachName: row.coachName }, analysis: analyses.get(athleteId)!, review: review ? { reviewedAt: review.reviewedAt, note: review.note } : null, trend: null };
 }
 
 /** Vérifie qu'un athlète appartient bien à l'organisation de l'utilisateur. */
@@ -158,6 +167,19 @@ export async function setReviewed(orgId: string, athleteId: string, weekStart: I
     .insert(weeklyReviews)
     .values({ athleteId, weekStart, reviewedBy: reviewed ? userId : null, reviewedAt })
     .onConflictDoUpdate({ target: [weeklyReviews.athleteId, weeklyReviews.weekStart], set: { reviewedBy: reviewed ? userId : null, reviewedAt, updatedAt: new Date() } });
+}
+
+/** Valide d'un coup tous les athlètes sans signal : le coach ne s'arrête que sur les exceptions. */
+export async function reviewAllOnTrack(orgId: string, weekStart: ISODate, today: ISODate, userId: string): Promise<number> {
+  const pending = (await getWeekReview(orgId, weekStart, today)).filter((row) => row.analysis.status === 'ok' && !row.review?.reviewedAt);
+  if (pending.length === 0) return 0;
+  const db = await getDb();
+  const reviewedAt = new Date();
+  await db
+    .insert(weeklyReviews)
+    .values(pending.map((row) => ({ athleteId: row.athlete.id, weekStart, reviewedBy: userId, reviewedAt })))
+    .onConflictDoUpdate({ target: [weeklyReviews.athleteId, weeklyReviews.weekStart], set: { reviewedBy: userId, reviewedAt, updatedAt: reviewedAt } });
+  return pending.length;
 }
 
 export async function saveNote(orgId: string, athleteId: string, weekStart: ISODate, note: string): Promise<void> {

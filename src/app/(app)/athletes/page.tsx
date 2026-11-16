@@ -54,12 +54,11 @@ export default async function AthletesPage() {
                 <th scope="col" className="px-3 py-2 text-right font-medium">FTP</th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">Seuil course</th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">CSS</th>
-                <th scope="col" className="px-4 py-2 font-medium">Source de données</th>
+                <th scope="col" className="px-4 py-2 font-medium">Sources de données</th>
               </tr>
             </thead>
             <tbody>
               {roster.map(({ athlete, coachName, connections, nextRace }) => {
-                const connection = connections[0];
                 return (
                   <tr key={athlete.id} className="relative border-b border-line last:border-0 hover:bg-sunken">
                     <th scope="row" className="px-4 py-2.5 font-medium">
@@ -82,11 +81,15 @@ export default async function AthletesPage() {
                     <td className="px-3 py-2.5 text-right tnum">{athlete.runThresholdPaceS ? `${formatPace(athlete.runThresholdPaceS)} /km` : '–'}</td>
                     <td className="px-3 py-2.5 text-right tnum">{athlete.swimCssS ? `${formatPace(athlete.swimCssS)} /100 m` : '–'}</td>
                     <td className="px-4 py-2.5">
-                      {connection ? (
-                        <>
-                          {PROVIDER_LABELS[connection.provider] ?? connection.provider}{' '}
-                          <span className={`text-sm ${connection.status === 'active' ? 'text-ink-3' : 'font-medium text-critical-ink'}`}>{connection.status === 'active' ? syncAge(connection.lastSyncAt) : 'à reconnecter'}</span>
-                        </>
+                      {connections.length > 0 ? (
+                        <ul className="space-y-0.5">
+                          {connections.map((connection) => (
+                            <li key={connection.id}>
+                              {PROVIDER_LABELS[connection.provider] ?? connection.provider}{' '}
+                              <span className={`text-sm ${connection.status === 'active' ? 'text-ink-3' : 'font-medium text-critical-ink'}`}>{connection.status === 'active' ? syncAge(connection.lastSyncAt) : 'à reconnecter'}</span>
+                            </li>
+                          ))}
+                        </ul>
                       ) : (
                         <span className="font-medium text-warning-ink">Aucune source</span>
                       )}

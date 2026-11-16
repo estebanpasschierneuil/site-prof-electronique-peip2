@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Mail } from 'lucide-react';
 
-/** Brouillon de retour à l'athlète : modifiable, puis copié vers la messagerie du coach. */
-export function MessageDraft({ initial }: { initial: string }) {
+/** Brouillon de retour à l'athlète : modifiable, puis copié ou ouvert dans la messagerie du coach. */
+export function MessageDraft({ initial, id = 'message', email, subject, compact = false }: { initial: string; id?: string; email?: string | null; subject?: string; compact?: boolean }) {
   const [text, setText] = useState(initial);
   const [copied, setCopied] = useState<'idle' | 'done' | 'failed'>('idle');
 
@@ -20,15 +20,21 @@ export function MessageDraft({ initial }: { initial: string }) {
 
   return (
     <div>
-      <label htmlFor="message" className="sr-only">
+      <label htmlFor={id} className="sr-only">
         Message à l’athlète
       </label>
-      <textarea id="message" className="field min-h-72 resize-y leading-relaxed" value={text} onChange={(e) => setText(e.target.value)} />
-      <div className="mt-2 flex items-center gap-3">
+      <textarea id={id} className={`field resize-y leading-relaxed ${compact ? 'min-h-44' : 'min-h-72'}`} value={text} onChange={(e) => setText(e.target.value)} />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <button type="button" className="btn" onClick={copy}>
           {copied === 'done' ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
           Copier le message
         </button>
+        {email ? (
+          <a className="btn" href={`mailto:${email}?subject=${encodeURIComponent(subject ?? '')}&body=${encodeURIComponent(text)}`}>
+            <Mail size={15} aria-hidden="true" />
+            Ouvrir dans la messagerie
+          </a>
+        ) : null}
         {text !== initial ? (
           <button type="button" className="btn btn-quiet" onClick={() => setText(initial)}>
             Rétablir le brouillon

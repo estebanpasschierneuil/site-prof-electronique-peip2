@@ -47,6 +47,12 @@ const NEXT_WEEK: Record<Recommendation['mode'], string> = {
 export function draftMessage(firstName: string, a: Pick<WeeklyAnalysis, 'weekStart' | 'load' | 'compliance'>, insights: Insight[], recommendation: Recommendation): string {
   const lines: string[] = [`Bonjour ${firstName},`, ''];
 
+  // Sans données, un bilan chiffré n'aurait aucun sens : le message ne fait que prendre des nouvelles.
+  if (insights.some((i) => i.code === 'no_data')) {
+    lines.push(ATHLETE_NOTES.no_data, '', 'Dès que tes séances reviennent, je te fais ton bilan et on cale la suite.', '', 'À très vite !');
+    return lines.join('\n');
+  }
+
   const volume = a.load.plannedDurationS > 0 ? `${formatDuration(a.load.durationS)} réalisées sur ${formatDuration(a.load.plannedDurationS)} prévues` : `${formatDuration(a.load.durationS)} d’entraînement`;
   const sessions = a.compliance.sessionsPlanned > 0 ? ` (${a.compliance.sessionsDone} séances sur ${a.compliance.sessionsPlanned}${a.compliance.loadPct !== null ? `, ${formatPct(a.compliance.loadPct)} de la charge` : ''})` : '';
   lines.push(`Bilan de ta semaine ${isoWeekNumber(a.weekStart)} : ${volume}${sessions}.`, '');
