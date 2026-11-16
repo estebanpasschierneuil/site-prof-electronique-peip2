@@ -17,8 +17,17 @@ const schema = z.object({
   /** Clé de chiffrement des jetons des plateformes (32 octets, base64). */
   APP_ENCRYPTION_KEY: z.string().optional(),
   CRON_SECRET: z.string().min(16).optional(),
+  // Identifiants d'application OAuth, un couple par plateforme.
   STRAVA_CLIENT_ID: z.string().optional(),
   STRAVA_CLIENT_SECRET: z.string().optional(),
+  POLAR_CLIENT_ID: z.string().optional(),
+  POLAR_CLIENT_SECRET: z.string().optional(),
+  WAHOO_CLIENT_ID: z.string().optional(),
+  WAHOO_CLIENT_SECRET: z.string().optional(),
+  OURA_CLIENT_ID: z.string().optional(),
+  OURA_CLIENT_SECRET: z.string().optional(),
+  WHOOP_CLIENT_ID: z.string().optional(),
+  WHOOP_CLIENT_SECRET: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

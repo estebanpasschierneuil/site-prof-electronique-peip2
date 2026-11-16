@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { boolean, date, index, integer, jsonb, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, date, index, integer, jsonb, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { WeeklyAnalysis } from '@/core/types';
 
 const id = () => uuid('id').primaryKey().defaultRandom();
@@ -124,6 +124,11 @@ export const activities = pgTable(
     load: real('load').notNull(),
     intensityFactor: real('intensity_factor'),
     loadMethod: text('load_method', { enum: ['power', 'pace', 'hr', 'rpe', 'duration'] }).notNull(),
+    /**
+     * Même séance reçue par une autre source (montre + Strava, par exemple) :
+     * la ligne est conservée mais écartée de l'analyse au profit de la plus complète.
+     */
+    duplicateOf: uuid('duplicate_of').references((): AnyPgColumn => activities.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('activities_source_unique').on(t.athleteId, t.source, t.externalId), index('activities_athlete_date_idx').on(t.athleteId, t.date)],
@@ -158,6 +163,26 @@ export const wellnessDays = pgTable(
     mood: integer('mood'),
   },
   (t) => [primaryKey({ columns: [t.athleteId, t.date] })],
+);
+
+/**
+ * Mesures de récupération telles que reçues, une ligne par source et par jour.
+ * `wellness_days` en est la fusion, champ par champ, selon la fiabilité de chaque source.
+ */
+export const wellnessSamples = pgTable(
+  'wellness_samples',
+  {
+    athleteId: uuid('athlete_id').notNull().references(() => athletes.id, { onDelete: 'cascade' }),
+    date: date('date', { mode: 'string' }).notNull(),
+    source: text('source').notNull(),
+    hrv: real('hrv'),
+    restingHr: integer('resting_hr'),
+    sleepH: real('sleep_h'),
+    fatigue: integer('fatigue'),
+    soreness: integer('soreness'),
+    mood: integer('mood'),
+  },
+  (t) => [primaryKey({ columns: [t.athleteId, t.date, t.source] })],
 );
 
 /** Analyse d'une semaine, calculée une fois puis servie telle quelle à la revue. */

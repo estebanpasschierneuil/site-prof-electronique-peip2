@@ -158,5 +158,5 @@ export async function connectIntervals(_prev: FormState, form: FormData): Promis
     .returning({ id: connections.id });
   const result = await syncConnection(db, connection.id);
   revalidatePath('/', 'layout');
-  return result.ok ? { ok: `Connexion établie : ${result.activities} séances importées.` } : { error: result.error ?? 'La synchronisation a échoué.' };
+  return result.ok ? { ok: `Connexion établie : ${result.activities} séances et ${result.wellnessDays} jours de récupération importés.` } : { error: result.error ?? 'La synchronisation a échoué.' };
 }

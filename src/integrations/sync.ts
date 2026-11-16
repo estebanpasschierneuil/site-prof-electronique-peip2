@@ -3,8 +3,10 @@ import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { addDays, todayISO } from '@/core/dates';
 import { computeLoad } from '@/core/load';
 import { getDb, type Db } from '@/db/client';
-import { activities, athletes, connections, plannedWorkouts, wellnessDays } from '@/db/schema';
+import { athletes, connections, plannedWorkouts } from '@/db/schema';
 import { decrypt, encrypt } from './crypto';
+import { ingestActivities, ingestWellness, touchAthlete } from './ingest';
+import { refreshIfNeeded } from './oauth';
 import type { Credentials } from './provider';
 import { PROVIDERS } from './registry';
 
@@ -16,19 +18,21 @@ export interface SyncResult {
   connectionId: string;
   ok: boolean;
   activities: number;
+  wellnessDays: number;
   error?: string;
 }
 
 /**
- * Synchronise une connexion : import incrémental et idempotent (clé source + identifiant externe),
- * calcul de la charge avec les seuils de l'athlète, puis invalidation des analyses en cache.
+ * Synchronise une connexion : renouvellement du jeton, import incrémental et idempotent,
+ * réconciliation avec les autres sources de l'athlète, puis invalidation des analyses en cache.
  */
 export async function syncConnection(db: Db, connectionId: string): Promise<SyncResult> {
+  const failure = (error: string): SyncResult => ({ connectionId, ok: false, activities: 0, wellnessDays: 0, error });
   const [row] = await db.select({ connection: connections, athlete: athletes }).from(connections).innerJoin(athletes, eq(athletes.id, connections.athleteId)).where(eq(connections.id, connectionId)).limit(1);
-  if (!row) return { connectionId, ok: false, activities: 0, error: 'Connexion introuvable.' };
+  if (!row) return failure('Connexion introuvable.');
   const { connection, athlete } = row;
   const provider = PROVIDERS[connection.provider];
-  if (!provider) return { connectionId, ok: false, activities: 0, error: `Aucun connecteur pour « ${connection.provider} ».` };
+  if (!provider) return failure(`Aucun connecteur pour « ${connection.provider} ».`);
 
   try {
     let credentials: Credentials = {
@@ -37,28 +41,21 @@ export async function syncConnection(db: Db, connectionId: string): Promise<Sync
       refreshToken: connection.refreshTokenEnc ? decrypt(connection.refreshTokenEnc) : null,
       expiresAt: connection.tokenExpiresAt,
     };
-    const refreshed = await provider.refresh?.(credentials);
+    const refreshed = await refreshIfNeeded(provider, credentials.refreshToken, credentials.expiresAt);
     if (refreshed) {
       credentials = { ...credentials, ...refreshed };
-      await db.update(connections).set({ accessTokenEnc: encrypt(refreshed.accessToken), refreshTokenEnc: encrypt(refreshed.refreshToken), tokenExpiresAt: refreshed.expiresAt }).where(eq(connections.id, connectionId));
+      await db
+        .update(connections)
+        .set({ accessTokenEnc: encrypt(refreshed.accessToken), refreshTokenEnc: refreshed.refreshToken ? encrypt(refreshed.refreshToken) : null, tokenExpiresAt: refreshed.expiresAt })
+        .where(eq(connections.id, connectionId));
     }
 
     const today = todayISO();
-    const since = connection.lastSyncAt ? addDays(connection.lastSyncAt.toISOString().slice(0, 10), -OVERLAP_DAYS) : addDays(today, -INITIAL_BACKFILL_DAYS);
+    const backfill = Math.min(INITIAL_BACKFILL_DAYS, provider.historyDays ?? INITIAL_BACKFILL_DAYS);
+    const since = connection.lastSyncAt ? addDays(connection.lastSyncAt.toISOString().slice(0, 10), -OVERLAP_DAYS) : addDays(today, -backfill);
 
-    const fetched = await provider.fetchActivities(credentials, since, today);
-    for (const a of fetched) {
-      const computed = computeLoad(a, athlete);
-      const mutable = { ...a, load: computed.load, intensityFactor: computed.intensityFactor, loadMethod: computed.method };
-      await db
-        .insert(activities)
-        .values({ ...mutable, athleteId: athlete.id, source: provider.id })
-        .onConflictDoUpdate({ target: [activities.athleteId, activities.source, activities.externalId], set: mutable });
-    }
-
-    for (const w of (await provider.fetchWellness?.(credentials, since, today)) ?? []) {
-      await db.insert(wellnessDays).values({ ...w, athleteId: athlete.id }).onConflictDoUpdate({ target: [wellnessDays.athleteId, wellnessDays.date], set: w });
-    }
+    const imported = await ingestActivities(db, athlete, provider.id, await provider.fetchActivities(credentials, since, today));
+    const wellness = await ingestWellness(db, athlete.id, provider.id, (await provider.fetchWellness?.(credentials, since, today)) ?? []);
 
     const planned = await provider.fetchPlannedWorkouts?.(credentials, since, addDays(today, PLAN_HORIZON_DAYS));
     if (planned) {
@@ -74,12 +71,12 @@ export async function syncConnection(db: Db, connectionId: string): Promise<Sync
     }
 
     await db.update(connections).set({ status: 'active', lastSyncAt: new Date(), lastError: null }).where(eq(connections.id, connectionId));
-    await db.update(athletes).set({ dataUpdatedAt: new Date() }).where(eq(athletes.id, athlete.id));
-    return { connectionId, ok: true, activities: fetched.length };
+    await touchAthlete(db, athlete.id);
+    return { connectionId, ok: true, activities: imported, wellnessDays: wellness };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erreur inconnue.';
     await db.update(connections).set({ status: 'error', lastError: message }).where(eq(connections.id, connectionId));
-    return { connectionId, ok: false, activities: 0, error: message };
+    return failure(message);
   }
 }
 

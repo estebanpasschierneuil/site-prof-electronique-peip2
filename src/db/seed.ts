@@ -4,7 +4,7 @@ import type { ISODate } from '@/core/dates';
 import { generateDemo } from '@/integrations/demo/generator';
 import { hashPassword } from '@/server/password';
 import type { Db } from './client';
-import { activities, athletes, connections, organizations, plannedWorkouts, races, users, weeklyAnalyses, wellnessDays } from './schema';
+import { activities, athletes, connections, organizations, plannedWorkouts, races, users, weeklyAnalyses, wellnessDays, wellnessSamples } from './schema';
 
 export const DEMO_ORG_SLUG = 'demo';
 export const DEMO_EMAIL = 'claire@demo.affut.app';
@@ -56,6 +56,7 @@ export async function ensureDemoData(db: Db, today: ISODate, force = false): Pro
       await tx.delete(activities).where(inArray(activities.athleteId, athleteIds));
       await tx.delete(plannedWorkouts).where(inArray(plannedWorkouts.athleteId, athleteIds));
       await tx.delete(wellnessDays).where(inArray(wellnessDays.athleteId, athleteIds));
+      await tx.delete(wellnessSamples).where(inArray(wellnessSamples.athleteId, athleteIds));
       await tx.delete(races).where(inArray(races.athleteId, athleteIds));
       await tx.delete(weeklyAnalyses).where(inArray(weeklyAnalyses.athleteId, athleteIds));
       await tx.delete(connections).where(inArray(connections.athleteId, athleteIds));

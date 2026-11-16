@@ -33,7 +33,8 @@ async function computeAnalyses(db: Db, rows: AthleteRow[], weekStart: ISODate, t
   const from = addDays(weekStart, -HISTORY_DAYS);
   const to = addDays(weekEnd(weekStart), 7);
   const [acts, plans, wells, raceRows] = await Promise.all([
-    db.select().from(activities).where(and(inArray(activities.athleteId, ids), gte(activities.date, from), lte(activities.date, to))),
+    // Une séance reçue par plusieurs sources ne compte qu'une fois.
+    db.select().from(activities).where(and(inArray(activities.athleteId, ids), isNull(activities.duplicateOf), gte(activities.date, from), lte(activities.date, to))),
     db.select().from(plannedWorkouts).where(and(inArray(plannedWorkouts.athleteId, ids), gte(plannedWorkouts.date, from), lte(plannedWorkouts.date, to))),
     db.select().from(wellnessDays).where(and(inArray(wellnessDays.athleteId, ids), gte(wellnessDays.date, from), lte(wellnessDays.date, to))),
     db.select().from(races).where(inArray(races.athleteId, ids)),
